@@ -1,0 +1,150 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: trade_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trade_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-trade_analyser}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-trade_analyser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: trade_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-mongo_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-mongo_pass}
+      MONGO_INITDB_DATABASE: trade_analyser
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  backend-node:
+    build:
+      context: ./backend-node
+      dockerfile: ../docker/Dockerfile.node
+    container_name: trade_node
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+
+      # Node should usually NOT use postgresql+asyncpg
+      DATABASE_URL: ${DOCKER_NODE_DATABASE_URL:-postgresql://postgres:trade_pass@postgres:5432/trade_analyser}
+
+      MONGODB_URI: mongodb://${MONGO_USER:-mongo_user}:${MONGO_PASSWORD:-mongo_pass}@mongodb:27017/trade_analyser?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-supersecret_change_in_production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      PYTHON_SERVICE_URL: http://backend-python:8000
+      UPLOAD_DIR: /app/uploads
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-20}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend-node/src:/app/src
+      - ./backend-node/prisma:/app/prisma
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  backend-python:
+    build:
+      context: ./backend-python
+      dockerfile: ../docker/Dockerfile.python
+    container_name: trade_python
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${PYTHON_DATABASE_URL:-postgresql+asyncpg://postgres:trade_pass@postgres:5432/trade_analyser}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      JWT_SECRET: ${JWT_SECRET:-supersecret_change_in_production}
+      NODE_SERVICE_URL: http://backend-node:3001
+      UPLOAD_DIR: /app/uploads
+      CHUNK_SIZE: ${CHUNK_SIZE:-1000}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-200}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend-python/app:/app/app
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: trade_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_NODE_API_URL: ${NEXT_PUBLIC_NODE_API_URL:-http://localhost:3001}
+      NEXT_PUBLIC_PYTHON_API_URL: ${NEXT_PUBLIC_PYTHON_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/lib:/app/lib
+      - ./frontend/types:/app/types
+      - ./frontend/public:/app/public
+    depends_on:
+      backend-node:
+        condition: service_healthy
+      backend-python:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: trade_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend-node
+      - backend-python
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  uploads_data:

@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 213 31% 91%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 213 31% 91%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 213 31% 91%;
+
+    --primary: 221 83% 60%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 213 31% 91%;
+
+    --muted: 222 47% 14%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 221 83% 60%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 213 31% 91%;
+
+    --border: 222 47% 14%;
+    --input: 222 47% 14%;
+    --ring: 221 83% 60%;
+
+    --radius: 0.5rem;
+
+    /* Trading palette */
+    --bull: 142 70% 40%;
+    --bear: 0 84% 55%;
+    --neutral: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+}
+
+@layer utilities {
+  .bull-text { color: hsl(var(--bull)); }
+  .bear-text { color: hsl(var(--bear)); }
+  .neutral-text { color: hsl(var(--neutral)); }
+  .bull-bg { background-color: hsl(var(--bull) / 0.15); }
+  .bear-bg { background-color: hsl(var(--bear) / 0.15); }
+  .neutral-bg { background-color: hsl(var(--neutral) / 0.15); }
+  .bull { background-color: hsl(var(--bull)); }
+  .bear { background-color: hsl(var(--bear)); }
+  .neutral { background-color: hsl(var(--neutral)); }
+  .bull-badge {
+    color: hsl(var(--bull));
+    background-color: hsl(var(--bull) / 0.12);
+    border-color: hsl(var(--bull) / 0.3);
+  }
+  .bear-badge {
+    color: hsl(var(--bear));
+    background-color: hsl(var(--bear) / 0.12);
+    border-color: hsl(var(--bear) / 0.3);
+  }
+  .neutral-badge {
+    color: hsl(var(--neutral));
+    background-color: hsl(var(--neutral) / 0.12);
+    border-color: hsl(var(--neutral) / 0.3);
+  }
+  .animate-fade-in { animation: fade-in 0.2s ease-out; }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

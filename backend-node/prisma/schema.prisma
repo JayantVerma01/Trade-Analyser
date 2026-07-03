@@ -1,0 +1,268 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum PaperTradeStatus {
+  PENDING
+  ACTIVE
+  TARGET_HIT
+  STOP_LOSS_HIT
+  MANUALLY_CLOSED
+  CANCELLED
+}
+
+enum TradeDirection {
+  LONG
+  SHORT
+}
+
+enum BacktestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(USER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  settings    UserSettings?
+  documents   TheoryDocument[]
+  strategies  Strategy[]
+  paperTrades PaperTrade[]
+  journals    TradeJournal[]
+  backtests   Backtest[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model UserSettings {
+  id                  String  @id @default(cuid())
+  userId              String  @unique @map("user_id")
+  capital             Decimal @default(100000)
+  riskPerTradePct     Decimal @default(1) @map("risk_per_trade_pct")
+  maxDailyLossPct     Decimal @default(3) @map("max_daily_loss_pct")
+  maxTradesPerDay     Int     @default(5) @map("max_trades_per_day")
+  defaultTimeframe    String  @default("15m") @map("default_timeframe")
+  preferredMarketType String  @default("intraday") @map("preferred_market_type")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model TheoryDocument {
+  id           String         @id @default(cuid())
+  userId       String         @map("user_id")
+  filename     String
+  originalName String         @map("original_name")
+  filePath     String         @map("file_path")
+  fileSize     Int            @map("file_size")
+  mimeType     String         @map("mime_type")
+  status            DocumentStatus @default(PENDING)
+  chunkCount        Int            @default(0) @map("chunk_count")
+  textChunkCount    Int            @default(0) @map("text_chunk_count")
+  imageChunkCount   Int            @default(0) @map("image_chunk_count")
+  errorMessage      String?        @map("error_message")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("theory_documents")
+}
+
+model Strategy {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  marketType  String   @map("market_type")
+  conditions  Json
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paperTrades PaperTrade[]
+  backtests   Backtest[]
+  tradeSetups TradeSetup[]
+
+  @@index([userId])
+  @@map("strategies")
+}
+
+model TradeSetup {
+  id                    String   @id @default(cuid())
+  userId                String   @map("user_id")
+  strategyId            String?  @map("strategy_id")
+  symbol                String
+  timeframe             String
+  marketBias            String   @map("market_bias")
+  setupType             String   @map("setup_type")
+  entryZone             Json     @map("entry_zone")
+  stopLoss              Decimal  @map("stop_loss")
+  target1               Decimal
+  target2               Decimal
+  riskReward            Decimal  @map("risk_reward")
+  positionSize          Int      @map("position_size")
+  confidenceScore       Int      @map("confidence_score")
+  rulesPassed           Json     @map("rules_passed")
+  rulesFailed           Json     @map("rules_failed")
+  theoryReferences      Json     @map("theory_references")
+  reasoning             String
+  invalidationCondition String   @map("invalidation_condition")
+  rawAnalysis           Json     @map("raw_analysis")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  strategy   Strategy?    @relation(fields: [strategyId], references: [id])
+  paperTrade PaperTrade?
+
+  @@index([userId])
+  @@map("trade_setups")
+}
+
+model Backtest {
+  id            String         @id @default(cuid())
+  userId        String         @map("user_id")
+  strategyId    String?        @map("strategy_id")
+  symbol        String
+  timeframe     String
+  fromDate      DateTime       @map("from_date")
+  toDate        DateTime       @map("to_date")
+  totalTrades   Int            @default(0) @map("total_trades")
+  winningTrades Int            @default(0) @map("winning_trades")
+  losingTrades  Int            @default(0) @map("losing_trades")
+  winRate       Decimal?       @map("win_rate")
+  avgRR         Decimal?       @map("avg_rr")
+  maxDrawdown   Decimal?       @map("max_drawdown")
+  netPnl        Decimal?       @map("net_pnl")
+  status        BacktestStatus @default(PENDING)
+  resultData    Json?          @map("result_data")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy? @relation(fields: [strategyId], references: [id])
+
+  @@index([userId])
+  @@map("backtests")
+}
+
+model PaperTrade {
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  setupId     String?          @unique @map("setup_id")
+  strategyId  String?          @map("strategy_id")
+  symbol      String
+  timeframe   String
+  direction   TradeDirection   @default(LONG)
+  entryPrice  Decimal          @map("entry_price")
+  stopLoss    Decimal          @map("stop_loss")
+  target1     Decimal
+  target2     Decimal
+  quantity    Int
+  capitalUsed Decimal          @map("capital_used")
+  status      PaperTradeStatus @default(PENDING)
+  exitPrice   Decimal?         @map("exit_price")
+  pnl         Decimal?
+  notes       String?
+  entryAt     DateTime?        @map("entry_at")
+  exitAt      DateTime?        @map("exit_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  setup    TradeSetup?  @relation(fields: [setupId], references: [id])
+  strategy Strategy?    @relation(fields: [strategyId], references: [id])
+  journal  TradeJournal?
+
+  @@index([userId])
+  @@map("paper_trades")
+}
+
+model TradeJournal {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  paperTradeId   String?  @unique @map("paper_trade_id")
+  symbol         String
+  setupType      String   @map("setup_type")
+  result         String
+  pnl            Decimal?
+  notes          String?
+  mistakes       Json?
+  emotionTags    Json?    @map("emotion_tags")
+  screenshotUrl  String?  @map("screenshot_url")
+  aiReview       String?  @map("ai_review")
+  lessonsLearned String?  @map("lessons_learned")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paperTrade PaperTrade? @relation(fields: [paperTradeId], references: [id])
+
+  @@index([userId])
+  @@map("trade_journal")
+}
+
+model BrokerConnection {
+  id                   String    @id @default(cuid())
+  userId               String    @map("user_id")
+  brokerName           String    @map("broker_name")
+  apiKeyEncrypted      String?   @map("api_key_encrypted")
+  apiSecretEncrypted   String?   @map("api_secret_encrypted")
+  accessTokenEncrypted String?   @map("access_token_encrypted")
+  tokenExpiresAt       DateTime? @map("token_expires_at")
+  isActive             Boolean   @default(false) @map("is_active")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("broker_connections")
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
