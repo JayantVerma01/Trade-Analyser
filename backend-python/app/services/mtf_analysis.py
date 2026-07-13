@@ -11,9 +11,9 @@ confidence score; a conflicting picture deducts up to -10 points.
 from typing import Any, Dict, List, Tuple
 
 from app.services.indicator_service import calculate_indicators, candles_to_df
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 # Primary TF → [immediate parent, grandparent]
 TF_HIERARCHY: Dict[str, List[str]] = {

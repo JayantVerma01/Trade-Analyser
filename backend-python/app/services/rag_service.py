@@ -150,7 +150,8 @@ async def answer_theory_question(
     llm = ChatOpenAI(
         model=settings.openai_model,
         openai_api_key=settings.openai_api_key,
-        temperature=0.1,  # Low temp for factual retrieval
+        temperature=0.1,       # Low temp for factual retrieval
+        max_tokens=1500,        # allow rich, multi-paragraph answers with citations
     )
 
     messages = [SystemMessage(content=SYSTEM_PROMPT.format(context=context))]

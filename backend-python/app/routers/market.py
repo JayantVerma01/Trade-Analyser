@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 from app.middleware.auth import verify_internal_request
 from fastapi import Depends
 
 router = APIRouter()
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 
 @router.get("/market/candles")

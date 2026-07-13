@@ -89,6 +89,7 @@ async def run_agent_query(
         model="gpt-4o-mini",
         temperature=0,
         openai_api_key=settings.openai_api_key,
+        max_tokens=2000,   # allow full multi-step answers with tool traces
     )
 
     agent = create_react_agent(llm, tools, state_modifier=SYSTEM_PROMPT)

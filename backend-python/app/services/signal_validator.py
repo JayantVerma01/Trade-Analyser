@@ -16,10 +16,10 @@ import numpy as np
 import pandas as pd
 import pandas_ta_classic as ta
 
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 from app.services.indicator_service import candles_to_df
 
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 WARMUP        = 55   # bars needed before indicators are reliable
 N_FORWARD     = 20   # bars to look ahead per simulated trade

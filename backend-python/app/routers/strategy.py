@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 from app.middleware.auth import verify_internal_request
 from app.services.strategy_engine import evaluate_strategy, VALID_INDICATORS, VALID_OPERATORS
 from app.services.indicator_service import calculate_indicators, candles_to_df
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
 
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────

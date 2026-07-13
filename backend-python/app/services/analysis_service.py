@@ -10,13 +10,13 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.services.indicator_service import calculate_indicators, candles_to_df, get_candles_for_chart
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 from app.services.strategy_engine import evaluate_strategy
 from app.services.signal_validator import validate_signal
 from app.services.mtf_analysis import analyse_mtf_confluence
 
-# Single instance — swap to real provider in Phase 7
-_provider = MockMarketProvider()
+# Active provider — selected by MARKET_PROVIDER env var (mock | yfinance)
+_provider = get_market_provider()
 
 RISK_WARNING = (
     "This is AI-generated analysis for educational and planning purposes only. "

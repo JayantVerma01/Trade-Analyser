@@ -12,10 +12,10 @@ from langchain_core.tools import tool
 
 from app.config import settings
 from app.services.analysis_service import run_analysis
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 from app.services.rag_service import answer_theory_question
 
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 
 def make_agent_tools(user_id: str, shared_state: Dict[str, Any]) -> List:

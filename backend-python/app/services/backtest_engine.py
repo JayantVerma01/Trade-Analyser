@@ -26,10 +26,10 @@ import numpy as np
 import pandas as pd
 import pandas_ta_classic as ta
 
-from app.services.market_data import MockMarketProvider
+from app.services.market_data import get_market_provider
 from app.services.strategy_engine import evaluate_strategy
 
-_provider = MockMarketProvider()
+_provider = get_market_provider()
 
 # ─── Indicator matrix ─────────────────────────────────────────────────────────
 

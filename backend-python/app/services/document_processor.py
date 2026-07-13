@@ -212,7 +212,7 @@ async def _describe_images_concurrently(
         model=settings.openai_vision_model,
         openai_api_key=settings.openai_api_key,
         temperature=0.0,
-        max_tokens=220,
+        max_tokens=500,   # bumped from 220 for richer image descriptions
     )
     semaphore = asyncio.Semaphore(settings.vision_concurrency)
 
