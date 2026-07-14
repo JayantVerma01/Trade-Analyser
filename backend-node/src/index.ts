@@ -36,9 +36,34 @@ app.set('trust proxy', 1);
 
 // ─── Security ────────────────────────────────────────────────────────────────
 app.use(helmet());
+
+// CLIENT_URL may be a single origin or a comma-separated list.
+// We also transparently accept every *.vercel.app URL so preview / branch
+// deploys of the frontend can hit the API without an env change per PR.
+const staticAllowlist = (config.CLIENT_URL || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+const isAllowedOrigin = (origin: string): boolean => {
+  const clean = origin.replace(/\/$/, '');
+  if (staticAllowlist.includes(clean)) return true;
+  // Any Vercel-hosted deploy (production, preview, branch)
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(clean)) return true;
+  // Localhost for dev
+  if (/^https?:\/\/localhost(:\d+)?$/i.test(clean)) return true;
+  return false;
+};
+
 app.use(
   cors({
-    origin: config.CLIENT_URL,
+    origin: (origin, callback) => {
+      // Non-browser requests (curl, server-to-server) have no Origin header — allow.
+      if (!origin) return callback(null, true);
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      logger.warn(`CORS blocked request from origin: ${origin}`);
+      return callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
