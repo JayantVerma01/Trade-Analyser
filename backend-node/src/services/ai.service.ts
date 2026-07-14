@@ -8,7 +8,7 @@ class AIService {
   constructor() {
     this.client = axios.create({
       baseURL: config.PYTHON_SERVICE_URL,
-      timeout: 120_000, // 2 min for long AI ops
+      timeout: 300_000, // 5 min — recommendation scans + agent trade-queries can legitimately run this long
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': config.JWT_SECRET, // guards Python service from direct external access

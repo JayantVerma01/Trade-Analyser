@@ -141,6 +141,79 @@ class YFinanceMarketProvider(BaseMarketProvider):
                 oldest = min(self._cache.items(), key=lambda x: x[1][0])[0]
                 del self._cache[oldest]
 
+    # ─── Bulk pre-fetch ──────────────────────────────────────────────────
+    # yfinance's Ticker(sym).history() = one HTTP request per symbol.
+    # yfinance's yf.download(tickers=[...]) = ONE request for the whole batch.
+    # For a 280-stock scan this drops wall time from ~5 minutes to ~10 seconds
+    # AND avoids Yahoo's per-IP rate-limiter, which throttles hard past ~30
+    # simultaneous requests.
+    #
+    # We warm the cache first; the subsequent single-symbol get_candles() calls
+    # hit our in-memory cache instead of Yahoo.
+
+    def warm_cache(self, symbols: List[str], timeframe: str = "1d") -> int:
+        """
+        Bulk-download candles for many symbols in a single Yahoo request.
+        Returns count of symbols successfully cached.
+        """
+        if not self._available or not symbols:
+            return 0
+
+        ysyms   = [self._to_yahoo_symbol(s) for s in symbols]
+        interval = _INTERVAL_MAP.get(timeframe, "15m")
+        period   = _PERIOD_FOR_INTERVAL.get(timeframe, "60d")
+
+        try:
+            data = self._yf.download(
+                tickers=ysyms,
+                period=period,
+                interval=interval,
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                auto_adjust=True,
+                prepost=False,
+                timeout=60,      # single big call — allow more time
+            )
+        except Exception as exc:
+            logger.warning(f"warm_cache bulk download failed: {exc}")
+            return 0
+
+        if data is None or data.empty:
+            logger.warning("warm_cache: Yahoo returned empty for bulk request")
+            return 0
+
+        cached = 0
+        for ysym in ysyms:
+            try:
+                # Single-ticker downloads return a flat DataFrame; multi-ticker
+                # downloads return a MultiIndex with (ticker, field) columns.
+                if len(ysyms) == 1:
+                    per_ticker = data
+                elif isinstance(data.columns, pd.MultiIndex):
+                    if ysym not in data.columns.get_level_values(0):
+                        continue
+                    per_ticker = data[ysym]
+                else:
+                    continue
+
+                per_ticker = per_ticker.dropna(how="all")
+                if per_ticker.empty:
+                    continue
+
+                candles = self._df_to_candles(per_ticker)
+                if not candles:
+                    continue
+
+                cache_key = f"c:{ysym}:{interval}:{period}"
+                self._cache_set(cache_key, candles)
+                cached += 1
+            except Exception as exc:
+                logger.debug(f"warm_cache: skip {ysym} — {exc}")
+
+        logger.info(f"warm_cache: pre-loaded {cached}/{len(ysyms)} symbols in one request")
+        return cached
+
     # ─── Symbol translation ──────────────────────────────────────────────
 
     @staticmethod
@@ -200,7 +273,7 @@ class YFinanceMarketProvider(BaseMarketProvider):
                     interval=interval,
                     auto_adjust=True,
                     prepost=False,
-                    timeout=8,
+                    timeout=25,       # bumped from 8s — cloud egress to Yahoo is slower
                 )
                 if df is None or df.empty:
                     if attempt < retries:
@@ -218,11 +291,18 @@ class YFinanceMarketProvider(BaseMarketProvider):
     def _df_to_candles(df: pd.DataFrame) -> List[Candle]:
         candles: List[Candle] = []
         for ts, row in df.iterrows():
-            # yfinance returns timezone-aware index; convert to UTC unix seconds
-            if hasattr(ts, "tz_convert"):
-                utc_ts = int(ts.tz_convert("UTC").timestamp())
-            else:
-                utc_ts = int(ts.timestamp())
+            # Ticker.history() returns tz-aware indices; yf.download() returns
+            # tz-naive for daily bars. Normalise both to UTC unix seconds.
+            try:
+                if getattr(ts, "tz", None) is not None:
+                    utc_ts = int(ts.tz_convert("UTC").timestamp())
+                elif hasattr(ts, "tz_localize"):
+                    utc_ts = int(ts.tz_localize("UTC").timestamp())
+                else:
+                    utc_ts = int(ts.timestamp())
+            except Exception:
+                continue
+
             try:
                 candles.append(Candle(
                     time=utc_ts,
@@ -232,7 +312,7 @@ class YFinanceMarketProvider(BaseMarketProvider):
                     close=float(row["Close"]),
                     volume=float(row.get("Volume", 0) or 0),
                 ))
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, KeyError):
                 continue  # skip malformed rows
         return candles
 

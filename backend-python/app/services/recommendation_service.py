@@ -49,8 +49,8 @@ STYLE_TIMEFRAME: Dict[str, str] = {
 }
 
 MIN_CONFIDENCE   = 45   # filter floor — below this isn't worth recommending
-MAX_CONCURRENCY  = 20   # max stocks analysed in parallel
-PER_STOCK_TIMEOUT = 12  # seconds — abort outlier slow analyses
+MAX_CONCURRENCY  = 5    # max stocks analysed in parallel (was 20 — Yahoo throttles above ~8)
+PER_STOCK_TIMEOUT = 30  # seconds — abort outlier slow analyses (was 12s)
 
 # Score weighting (must sum to 1.0)
 W_CONFIDENCE = 0.40
@@ -234,6 +234,25 @@ async def get_recommendations(
         f"| style={style} | tf={timeframe} | max_concurrency={MAX_CONCURRENCY}"
     )
     started = datetime.now(timezone.utc)
+
+    # Bulk pre-warm the provider cache with ONE Yahoo download for the whole
+    # universe. Individual _analyse_one() calls then hit the cache instead of
+    # hammering Yahoo per-symbol. Also fetch the two higher timeframes MTF
+    # analysis will need, so nothing goes cold mid-scan.
+    from app.services.market_data import get_market_provider
+    from app.services.mtf_analysis import TF_HIERARCHY
+    _prov = get_market_provider()
+    if hasattr(_prov, "warm_cache") and len(universe) >= 8:
+        loop = asyncio.get_event_loop()
+        needed_tfs = {timeframe, *TF_HIERARCHY.get(timeframe, [])}
+        for tf in needed_tfs:
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(None, _prov.warm_cache, universe, tf),
+                    timeout=90,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"warm_cache({tf}) exceeded 90s — proceeding with partial cache")
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
     tasks = [
