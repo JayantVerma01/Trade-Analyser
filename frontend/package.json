@@ -2,6 +2,9 @@
   "name": "trade-analyser-frontend",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:clean": "rimraf .next-dev && next dev",
