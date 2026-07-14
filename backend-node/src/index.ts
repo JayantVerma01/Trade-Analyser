@@ -26,6 +26,14 @@ import recommendationsRouter  from './modules/recommendations/recommendations.ro
 
 const app = express();
 
+// ─── Trust proxy ─────────────────────────────────────────────────────────────
+// Render/Vercel/Cloudflare put the real client IP in the X-Forwarded-For header.
+// Without this, express-rate-limit v7 refuses to work (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+// because it can't tell trusted proxy hops from spoofed ones.
+// `1` = trust exactly one hop (Render's edge proxy). Do not use `true` in prod —
+// that would trust any X-Forwarded-For header, letting attackers spoof their IP.
+app.set('trust proxy', 1);
+
 // ─── Security ────────────────────────────────────────────────────────────────
 app.use(helmet());
 app.use(
